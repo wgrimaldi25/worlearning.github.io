@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Language Flashcards</title>
+    <!-- Tailwind CSS Load -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font Configuration -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            /* El fondo claro por defecto ahora se ignora a favor del modo oscuro */
+            background-color: #f7f9fb;
+            transition: background-color 0.3s;
+        }
+        /* Estilos del MODO OSCURO (Ahora serán los estilos predeterminados) */
+        body.dark {
+            background-color: #1a1a2e; /* Fondo global más oscuro */
+            color: #e0e0e0;
+        }
+        /* Sobrescribir el fondo de la tarjeta principal (bg-white) */
+        body.dark .bg-white {
+            background-color: #2a2a4a; 
+        }
+        /* Ajustar sombra en modo oscuro */
+        body.dark .shadow-xl {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+        }
+        /* Ajustar el fondo personalizado de la tarjeta de la frase (bg-indigo-50) */
+        body.dark .bg-indigo-50 {
+            background-color: #3f3f7a; 
+            border-color: #5b21b6;
+        }
+        /* Asegurar que el texto más oscuro (text-gray-800) se aclare en el modo oscuro */
+        body.dark .text-gray-800 {
+            color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div id="app-container" class="w-full max-w-lg bg-white shadow-xl rounded-2xl p-6 md:p-8 transform transition-all duration-500">
+        
+        <!-- Main Title -->
+        <h1 class="text-3xl font-extrabold text-center text-indigo-700 dark:text-indigo-300 mb-6 border-b-2 border-indigo-100 dark:border-indigo-400 pb-3">
+            🌍 WorLearning 🌍
+        </h1>
+
+        <!-- Application Container (Menu, Quiz, or Results) -->
+        <div id="quiz-area" class="space-y-6">
+            <!-- Content will be injected here (Menu by default) -->
+        </div>
+
+    </div>
+
+    <!-- El botón de alternancia de tema ha sido eliminado -->
+
+    <script>
+        // --- PHRASE DATABASE BY LANGUAGE ---
+        const allQuizData = {
+            english: {
+                name: "English",
+                fromLang: "Spanish",
+                toLang: "English",
+                icon: "🇺🇸",
+                data: [
+                    { from_text: "¿Cómo estás hoy?", to_text: "How are you today?" },
+                    { from_text: "Me gusta ese color.", to_text: "I like that color." },
+                    { from_text: "Necesito ayuda, por favor.", to_text: "I need help, please." },
+                    { from_text: "Gracias por tu tiempo.", to_text: "Thank you for your time." },
+                    { from_text: "Esto es importante.", to_text: "This is important." },
+                ]
+            },
+            japanese: {
+                name: "Japanese",
+                fromLang: "Spanish",
+                toLang: "Japanese",
+                icon: "🇯🇵",
+                data: [
+                    { from_text: "Buenos días", to_text: "Ohayō gozaimasu (おはようございます)" },
+                    { from_text: "Gracias", to_text: "Arigatō gozaimasu (ありがとうございます)" },
+                    { from_text: "¿Dónde está la salida?", to_text: "Deguchi wa doko desu ka? (出口はどこですか)" },
+                    { from_text: "Lo siento / Perdón", to_text: "Gomen nasai (ごめんなさい)" },
+                    { from_text: "Permiso (para llamar la atención)", to_text: "Sumimasen (すみません)" },
+                ]
+            },
+            german: {
+                name: "German",
+                fromLang: "Spanish",
+                toLang: "German",
+                icon: "🇩🇪",
+                data: [
+                    { from_text: "¿Dónde está la estación de tren?", to_text: "Wo ist der Bahnhof?" },
+                    { from_text: "¿Cuánto cuesta esto?", to_text: "Wie viel kostet das?" },
+                    { from_text: "Me gustaría una cerveza.", to_text: "Ich möchte ein Bier." },
+                    { from_text: "¿Hablas inglés?", to_text: "Sprechen Sie Englisch?" },
+                    { from_text: "Estoy aprendiendo alemán.", to_text: "Ich lerne Deutsch." },
+                ]
+            },
+            portuguese: {
+                name: "Portuguese",
+                fromLang: "Spanish",
+                toLang: "Portuguese",
+                icon: "🇧🇷",
+                data: [
+                    { from_text: "Quiero un vaso de agua.", to_text: "Eu quero um copo de água." },
+                    { from_text: "¿Cuál es tu nombre?", to_text: "Qual é o seu nome?" },
+                    { from_text: "Hasta luego.", to_text: "Até logo." },
+                    { from_text: "No entiendo.", to_text: "Eu não entendo." },
+                    { from_text: "Es hermoso.", to_text: "É lindo." },
+                ]
+            }
+        };
+
+        // --- GLOBAL QUIZ STATE ---
+        let quizState = {
+            currentLessonIndex: 0,
+            score: 0,
+            totalQuestions: 0,
+            phrases: [],
+            currentPhrase: null,
+            isAnswerVisible: false,
+            selectedLanguage: null,
+        };
+
+        const quizArea = document.getElementById('quiz-area');
+        const appTitle = document.querySelector('#app-container h1');
+        const body = document.body;
+
+        // --- THEME MANAGEMENT ---
+
+        /**
+         * Simplemente establece el modo oscuro como predeterminado y único.
+         */
+        function setDarkModeOnly() {
+            body.classList.add('dark');
+        }
+
+        // --- Utility Functions ---
+
+        /**
+         * Shuffles the phrases randomly.
+         */
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        /**
+         * Normalizes the string for flexible comparison (lowercase and trim).
+         */
+        function normalize(text) {
+            if (!text) return "";
+            return text.toLowerCase().trim();
+        }
+
+        // --- Application Views ---
+
+        /**
+         * Displays the language selection menu.
+         */
+        function showMenu() {
+            appTitle.innerHTML = '🌍 WorLearning 🌍';
+            // Dado que ahora siempre estamos en modo oscuro, las clases dark: se aplicarán automáticamente.
+            quizArea.innerHTML = `
+                <p class="text-lg text-center text-gray-700 dark:text-gray-300 mb-6">Select the language you want to practice:</p>
+                <div class="grid grid-cols-1 gap-4">
+                    ${Object.keys(allQuizData).map(key => `
+                        <button onclick="selectLanguage('${key}')"
+                                class="flex items-center justify-between p-4 bg-white dark:bg-gray-700 border-2 border-indigo-200 dark:border-indigo-400 text-indigo-700 dark:text-indigo-300 font-bold rounded-xl shadow-md hover:bg-indigo-100 dark:hover:bg-indigo-800 transition duration-150 transform hover:scale-[1.02]">
+                            <span class="text-3xl">${allQuizData[key].icon}</span>
+                            <span class="text-xl">${allQuizData[key].name}</span>
+                            <span class="text-sm font-light text-gray-500 dark:text-gray-400">
+                                (${allQuizData[key].fromLang} → ${allQuizData[key].toLang})
+                            </span>
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        /**
+         * Selects a language and starts the quiz.
+         * @param {string} langKey - The language key ('english', 'japanese', etc.)
+         */
+        function selectLanguage(langKey) {
+            const langData = allQuizData[langKey];
+            quizState.selectedLanguage = langData;
+            quizState.phrases = [...langData.data];
+            quizState.totalQuestions = langData.data.length;
+            
+            startQuiz();
+        }
+
+
+        /**
+         * Starts the quiz, shuffling the phrases.
+         */
+        function startQuiz() {
+            shuffleArray(quizState.phrases);
+            quizState.currentLessonIndex = 0;
+            quizState.score = 0;
+            quizState.isAnswerVisible = false;
+            displayCurrentPhrase();
+        }
+
+        /**
+         * Renders the current quiz interface.
+         */
+        function displayCurrentPhrase() {
+            if (quizState.currentLessonIndex >= quizState.totalQuestions) {
+                showResults();
+                return;
+            }
+
+            const lang = quizState.selectedLanguage;
+            quizState.currentPhrase = quizState.phrases[quizState.currentLessonIndex];
+            quizState.isAnswerVisible = false;
+
+            // Progress
+            const progress = (quizState.currentLessonIndex / quizState.totalQuestions) * 100;
+
+            appTitle.innerHTML = `${lang.icon} ${lang.name} Quiz`;
+
+            quizArea.innerHTML = `
+                <!-- Back to Menu Button -->
+                <button onclick="showMenu()" class="text-indigo-500 hover:text-indigo-700 dark:text-indigo-300 dark:hover:text-indigo-500 text-sm font-semibold mb-4 flex items-center">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    Back to Menu
+                </button>
+
+                <!-- Progress Bar -->
+                <div class="mb-6">
+                    <p class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">
+                        Progress: ${quizState.currentLessonIndex} of ${quizState.totalQuestions}
+                    </p>
+                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+                        <div class="bg-indigo-500 h-2.5 rounded-full transition-all duration-500" style="width: ${progress}%"></div>
+                    </div>
+                </div>
+
+                <!-- Phrase Card (Source Language) -->
+                <div class="bg-indigo-50 dark:bg-purple-900/40 p-6 rounded-xl border border-indigo-200 dark:border-indigo-700 shadow-md">
+                    <p class="text-sm font-semibold text-indigo-600 dark:text-indigo-300 mb-2">Phrase in ${lang.fromLang}:</p>
+                    <p id="phrase-text" class="text-xl md:text-2xl font-bold text-gray-800 dark:text-gray-100">
+                        ${quizState.currentPhrase.from_text}
+                    </p>
+                </div>
+
+                <!-- Response Area and Buttons -->
+                <div id="response-area" class="space-y-4">
+                    <input type="text" id="user-input" placeholder="Write the translation here (in ${lang.toLang})..."
+                           class="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:border-indigo-500 focus:ring-indigo-500 transition duration-150"
+                           onkeydown="if(event.key === 'Enter') checkAnswer();">
+
+                    <div class="flex flex-col md:flex-row gap-3">
+                        <button id="check-btn" onclick="checkAnswer()"
+                                class="flex-1 px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-700 transition duration-150 transform hover:scale-[1.02]">
+                            Check Answer
+                        </button>
+                        <button id="show-answer-btn" onclick="toggleAnswer()"
+                                class="px-6 py-3 bg-gray-200 text-gray-700 dark:bg-gray-600 dark:text-gray-100 font-semibold rounded-lg shadow-md hover:bg-gray-300 dark:hover:bg-gray-700 transition duration-150">
+                            Show Hint
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('user-input').focus();
+        }
+
+        /**
+         * Shows/hides the correct answer as a hint.
+         */
+        function toggleAnswer() {
+            const lang = quizState.selectedLanguage;
+            const currentPhrase = quizState.currentPhrase;
+            const responseArea = document.getElementById('response-area');
+            const answerBoxId = 'answer-box';
+
+            if (!quizState.isAnswerVisible) {
+                // Show the answer
+                const answerBox = document.createElement('div');
+                answerBox.id = answerBoxId;
+                // Updated classes for dark mode support
+                answerBox.className = 'p-3 bg-yellow-100 dark:bg-yellow-900/40 border-l-4 border-yellow-500 dark:border-yellow-600 text-yellow-800 dark:text-yellow-300 rounded-lg mt-3 transition duration-300 ease-in-out transform scale-0 translate-y-2 opacity-0';
+                answerBox.innerHTML = `<strong>Correct Translation (${lang.toLang}):</strong> ${currentPhrase.to_text}`;
+
+                responseArea.appendChild(answerBox);
+
+                // Apply transition
+                setTimeout(() => {
+                    answerBox.classList.remove('scale-0', 'translate-y-2', 'opacity-0');
+                    answerBox.classList.add('scale-100', 'translate-y-0', 'opacity-100');
+                }, 10);
+
+                document.getElementById('show-answer-btn').textContent = 'Hide Hint';
+                quizState.isAnswerVisible = true;
+            } else {
+                // Hide the answer
+                const answerBox = document.getElementById(answerBoxId);
+                if (answerBox) {
+                    answerBox.classList.add('scale-0', 'translate-y-2', 'opacity-0');
+                    setTimeout(() => {
+                        answerBox.remove();
+                    }, 300);
+                }
+                document.getElementById('show-answer-btn').textContent = 'Show Hint';
+                quizState.isAnswerVisible = false;
+            }
+        }
+
+
+        /**
+         * Checks the user's answer and provides feedback.
+         */
+        function checkAnswer() {
+            const userInput = document.getElementById('user-input').value;
+            const correctTranslation = quizState.currentPhrase.to_text;
+            
+            // Use only the text of the answer for normalization (ignore notes in parentheses)
+            const answerTextOnly = correctTranslation.replace(/\s*\([^)]*\)\s*/g, '').trim(); 
+            
+            const normalizedInput = normalize(userInput);
+            const normalizedCorrect = normalize(answerTextOnly);
+
+            // A flexible check that also accepts the complete answer with parentheses
+            const isCorrect = normalizedInput === normalizedCorrect || normalize(userInput) === normalize(correctTranslation);
+
+            const feedbackArea = document.getElementById('response-area');
+
+            // 1. Remove previous feedback
+            const oldFeedback = document.getElementById('feedback-message');
+            if (oldFeedback) oldFeedback.remove();
+
+            // 2. Create the new feedback message
+            const feedbackMessage = document.createElement('div');
+            feedbackMessage.id = 'feedback-message';
+            feedbackMessage.className = 'p-4 rounded-lg mt-4 shadow-lg transition duration-300 transform scale-0 opacity-0';
+            
+            if (isCorrect) {
+                // Updated classes for dark mode support
+                feedbackMessage.classList.add('bg-green-100', 'dark:bg-green-900/40', 'border-l-4', 'border-green-500', 'dark:border-green-600', 'text-green-800', 'dark:text-green-300');
+                feedbackMessage.innerHTML = `
+                    <p class="font-bold">🎉 Correct!</p>
+                    <p>Well done! You can continue.</p>
+                `;
+                quizState.score++;
+            } else {
+                // Updated classes for dark mode support
+                feedbackMessage.classList.add('bg-red-100', 'dark:bg-red-900/40', 'border-l-4', 'border-red-500', 'dark:border-red-600', 'text-red-800', 'dark:text-red-300');
+                feedbackMessage.innerHTML = `
+                    <p class="font-bold">❌ Incorrect.</p>
+                    <p>The correct answer was: <span class="font-mono bg-red-200 dark:bg-red-800 p-1 rounded">${correctTranslation}</span></p>
+                `;
+            }
+
+            // 3. Add the message and animate it
+            feedbackArea.appendChild(feedbackMessage);
+            setTimeout(() => {
+                feedbackMessage.classList.remove('scale-0', 'opacity-0');
+                feedbackMessage.classList.add('scale-100', 'opacity-100');
+            }, 10);
+
+
+            // 4. Block input and show the next button
+            document.getElementById('user-input').disabled = true;
+            document.getElementById('check-btn').style.display = 'none';
+
+            const nextButton = document.createElement('button');
+            nextButton.id = 'next-btn';
+            nextButton.className = 'w-full px-6 py-3 mt-3 bg-indigo-500 text-white font-semibold rounded-lg shadow-lg hover:bg-indigo-600 transition duration-150 transform hover:scale-[1.02]';
+            nextButton.textContent = 'Next Phrase »';
+            nextButton.onclick = nextPhrase;
+            feedbackArea.appendChild(nextButton);
+            nextButton.focus();
+        }
+
+        /**
+         * Advances to the next phrase.
+         */
+        function nextPhrase() {
+            quizState.currentLessonIndex++;
+            displayCurrentPhrase();
+        }
+
+        /**
+         * Shows the final results screen.
+         */
+        function showResults() {
+            const lang = quizState.selectedLanguage;
+            const percentage = Math.round((quizState.score / quizState.totalQuestions) * 100);
+            let resultMessage = "Great job! Keep practicing.";
+            let resultColor = "text-indigo-600 dark:text-indigo-300";
+            let resultIcon = "✨";
+
+            if (percentage === 100) {
+                resultMessage = "Congratulations! Total mastery! You're a pro.";
+                resultColor = "text-green-600 dark:text-green-400";
+                resultIcon = "🏆";
+            } else if (percentage >= 70) {
+                resultMessage = "Very good, a great result. Keep it up!";
+                resultColor = "text-blue-600 dark:text-blue-400";
+                resultIcon = "👍";
+            } else {
+                resultMessage = "Good effort. Practice makes perfect!";
+                resultColor = "text-yellow-600 dark:text-yellow-400";
+                resultIcon = "✍️";
+            }
+
+            appTitle.innerHTML = `Results for ${lang.name}`;
+
+            quizArea.innerHTML = `
+                <div class="text-center p-8 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-t-8 border-indigo-500 dark:border-indigo-700">
+                    <div class="text-6xl mb-4">${resultIcon}</div>
+                    <h2 class="text-3xl font-bold mb-2 ${resultColor}">Quiz Finished!</h2>
+                    <p class="text-xl font-medium text-gray-700 dark:text-gray-300 mb-4">${resultMessage}</p>
+                    
+                    <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg mb-6 border dark:border-gray-600">
+                        <p class="text-4xl font-extrabold ${resultColor}">${percentage}%</p>
+                        <p class="text-lg text-gray-600 dark:text-gray-400">Score: ${quizState.score} of ${quizState.totalQuestions}</p>
+                    </div>
+
+                    <button onclick="startQuiz()"
+                            class="w-full px-6 py-3 mb-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-xl hover:bg-indigo-700 transition duration-150 transform hover:scale-[1.02]">
+                        Repeat ${lang.name} Quiz
+                    </button>
+                    <!-- Las clases de modo claro/oscuro están definidas explícitamente -->
+                    <button onclick="showMenu()"
+                            class="w-full px-6 py-3 bg-gray-200 text-gray-800 font-semibold rounded-lg shadow-xl hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600 transition duration-150 transform hover:scale-[1.02]">
+                        Change Language
+                    </button>
+                </div>
+            `;
+        }
+
+        // --- Initialization ---
+        window.onload = () => {
+            setDarkModeOnly(); // Forzar modo oscuro al cargar
+            showMenu();
+        };
+
+    </script>
+</body>
+</html>
